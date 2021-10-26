@@ -1,0 +1,2 @@
+grycap\keycloak\event\listener\kube_authorizer\KubeAuthorizerEventListenerProviderFactory.class
+grycap\keycloak\event\listener\kube_authorizer\KubeAuthorizerEventListenerProvider.class
