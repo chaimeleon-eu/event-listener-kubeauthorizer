@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import org.jboss.logging.Logger;
 import java.util.Set;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import org.keycloak.events.Event;
 import org.keycloak.events.EventListenerProvider;
@@ -66,10 +67,8 @@ public class KubeAuthorizerEventListenerProvider implements EventListenerProvide
     public void onEvent(AdminEvent event, boolean includeRepresentation) {
         String user_id, user_name, user_email, group_id, group_name;
         String post_endpoint, post_json;
-        
+        ArrayList <String> user_groups = new ArrayList<String>();
         RealmModel realm = this.model.getRealm(event.getRealmId());
-        
-
         
         if ( target_event.equals(event.getResourceType()) && event.getOperationType().equals(OperationType.CREATE) ){
             log.info( String.format( "### ------------ NEW ADMIN ENVENT - %s - %s ------------ ###", event.getResourceType().toString(), event.getOperationType().toString() ) );
@@ -80,21 +79,31 @@ public class KubeAuthorizerEventListenerProvider implements EventListenerProvide
             group_id = event.getResourcePath().split("/")[3];
             group_name = realm.getGroupById(group_id).getName() ;
             
-            
-            log.info( String.format( "User %s (%s) added to %s (%s) group", user_name, user_id, group_name, group_id) );
+            this.session.users().getUserById(realm, user_id).getGroupsStream().forEach((g)-> {
+                user_groups.add(String.format( "\"%s\"" , g.getName()) );
+            });
+
+            //JSONArray user_groups_json = new JSONArray(user_groups);     
+            log.info( String.format( "User %s (%s) added to %s (%s) group", user_name, user_id, group_name, group_id) );    
+            //log.info( String.format( "Groups: [ %s ]", user_groups.toString() )  );
             
             if (target_groups.contains(group_name)) {
                 log.info( String.format( "Send authorization request to kube-authorizer for user: name=%s; id/sub=%s, email=%s", user_name, user_id, user_email) );
                 
-                post_endpoint = String.format("%s/authorize/%s", this.kubeauthorizer_endpoint, user_name) ;
+                post_endpoint = String.format("%s/authorize", this.kubeauthorizer_endpoint) ;
                 
+/*
                 if (this.kubeauthorizer_userclaim.equals("sub") || this.kubeauthorizer_userclaim.equals("id")){
-                    post_endpoint = String.format("%s/authorize/%s", this.kubeauthorizer_endpoint, user_id) ;
+                    post_endpoint = String.format("%s/authorize", this.kubeauthorizer_endpoint, user_id) ;
                 }
-                
+                */
+
                 HttpPost post = new HttpPost(post_endpoint);
-                post_json = String.format( "{ \"email\": \"%s\" }", user_email) ;
+                post_json = String.format( "{ \"email\": \"%s\",  \"id\": \"%s\", \"groups\": %s, \"username\": \"%s\" }", user_email, user_id, user_groups.toString(), user_name ) ;
+                //log.debug( String.format( "POST_JSON: %s", post_json) );
                 StringEntity entity;
+
+                //\"groups\": \"[%s]\",  
                 
                 entity = new StringEntity(post_json, ContentType.APPLICATION_JSON);
                 post.setEntity(entity);
